@@ -19,7 +19,7 @@
     "express": "^4.16.4",
     "mediasoup": "github:MiracleZhang/mediasoup#v3",
     "pidusage": "^2.0.17",
-    "protoo-server": "^4.0.3"
+    "protoo-server": "^4.0.2"
   },
   "devDependencies": {
     "gulp": "^4.0.1",
