@@ -22,7 +22,7 @@ const VIDEO_ENCODINGS =
 
 const EXTERNAL_VIDEO_SRC = '/resources/videos/video-audio-stereo.mp4';
 
-const logger = new Logger('RoomClient');
+const logger = new Logger('LPZRoomClient');
 
 let store;
 
@@ -34,6 +34,7 @@ export default class RoomClient
 	 */
 	static init(data)
 	{
+		logger.debug('init, data is createReduxStore, in index.jsx 50 lines');
 		store = data.store;
 	}
 
@@ -53,8 +54,11 @@ export default class RoomClient
 	)
 	{
 		logger.debug(
-			'constructor() [roomId:"%s", peerId:"%s", displayName:"%s", device:%s]',
-			roomId, peerId, displayName, device.flag);
+			'constructor() 1 [roomId:"%s", peerId:"%s", displayName:"%s",'+
+			' device.flag:"%s", device.name:"%s", device.version:"%s", useSimulcast:%d'+
+			' forceTcp:%d, produce:%o, consume:%o, forceH264:%d, externalVideo:%d]',
+			roomId, peerId, displayName, device.flag, device.name, device.version, useSimulcast,
+			forceTcp, produce, consume, forceH264, externalVideo);
 
 		// Closed flag.
 		// @type {Boolean}
@@ -113,6 +117,8 @@ export default class RoomClient
 		// Protoo URL.
 		// @type {String}
 		this._protooUrl = getProtooUrl({ roomId, peerId, forceH264 });
+
+		logger.debug('constructor() _protooUrl:%s ', this._protooUrl);
 
 		// protoo-client Peer instance.
 		// @type {protooClient.Peer}
@@ -182,17 +188,21 @@ export default class RoomClient
 
 	async join()
 	{
+		logger.debug('join(), new protooClient.WebSocketTransport _protooUrl:%s', this._protooUrl);
 		const protooTransport = new protooClient.WebSocketTransport(this._protooUrl);
 
 		this._protoo = new protooClient.Peer(protooTransport);
 
+		logger.debug('join(), store.dispatch, state:connecting');
 		store.dispatch(
 			stateActions.setRoomState('connecting'));
 
+		logger.debug('join(), websocket, open');
 		this._protoo.on('open', () => this._joinRoom());
 
 		this._protoo.on('failed', () =>
 		{
+			logger.debug('join(), websocket, open, failed');
 			store.dispatch(requestActions.notify(
 				{
 					type : 'error',
@@ -202,6 +212,7 @@ export default class RoomClient
 
 		this._protoo.on('disconnected', () =>
 		{
+			logger.debug('join(), websocket, open, disconnected');
 			store.dispatch(requestActions.notify(
 				{
 					type : 'error',
@@ -227,6 +238,7 @@ export default class RoomClient
 
 		this._protoo.on('close', () =>
 		{
+			logger.debug('join(), websocket, open, close');
 			if (this._closed)
 				return;
 
@@ -282,6 +294,7 @@ export default class RoomClient
 							appData : { ...appData, peerId } // Trick.
 						});
 
+					logger.debug('join(), "request", "newConsumer", consumer:%o', consumer);
 					// Store in the map.
 					this._consumers.set(consumer.id, consumer);
 
@@ -294,6 +307,7 @@ export default class RoomClient
 						mediasoupClient.parseScalabilityMode(
 							consumer.rtpParameters.encodings[0].scalabilityMode);
 
+					logger.debug('join(), "request", "newConsumer", spatialLayers:%o, temporalLayers:%o', spatialLayers, temporalLayers);
 					store.dispatch(stateActions.addConsumer(
 						{
 							id                     : consumer.id,
@@ -491,17 +505,21 @@ export default class RoomClient
 		{
 			if (!this._externalVideo)
 			{
-				logger.debug('enableMic() | calling getUserMedia()');
+				logger.debug('enableMic() | _externalVideo:false, calling getUserMedia()');
 
 				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
 				track = stream.getAudioTracks()[0];
+
+				logger.debug('enableMic(), stream:%o, track:%o', stream, track);
 			}
 			else
 			{
 				const stream = await this._getExternalVideoStream();
 
 				track = stream.getAudioTracks()[0].clone();
+
+				logger.debug('enableMic(), stream:%o, track:%o', stream, track);
 			}
 
 			this._micProducer = await this._sendTransport.produce(
@@ -514,6 +532,7 @@ export default class RoomClient
 					}
 				});
 
+			logger.debug('enableMic(), create micProducer:%o', this._micProducer);
 			store.dispatch(stateActions.addProducer(
 				{
 					id            : this._micProducer.id,
@@ -525,11 +544,13 @@ export default class RoomClient
 
 			this._micProducer.on('transportclose', () =>
 			{
+				logger.debug('enableMic(), transportclose');
 				this._micProducer = null;
 			});
 
 			this._micProducer.on('trackended', () =>
 			{
+				logger.debug('enableMic(), trackended');
 				store.dispatch(requestActions.notify(
 					{
 						type : 'error',
@@ -569,6 +590,7 @@ export default class RoomClient
 
 		try
 		{
+			logger.debug('disableMic(), "request", "closeProducer"');
 			await this._protoo.request(
 				'closeProducer', { producerId: this._micProducer.id });
 		}
@@ -590,8 +612,11 @@ export default class RoomClient
 
 		this._micProducer.pause();
 
+		logger.debug('muteMic(), pause _micProducer:%o', this._micProducer);
+
 		try
 		{
+			logger.debug('muteMic(), "request", "pauseProducer"');
 			await this._protoo.request(
 				'pauseProducer', { producerId: this._micProducer.id });
 
@@ -616,8 +641,10 @@ export default class RoomClient
 
 		this._micProducer.resume();
 
+		logger.debug('muteMic(), resume _micProducer:%o', this._micProducer);
 		try
 		{
+			logger.debug('unmuteMic(), "request", "resumeProducer"');
 			await this._protoo.request(
 				'resumeProducer', { producerId: this._micProducer.id });
 
@@ -660,9 +687,12 @@ export default class RoomClient
 		{
 			if (!this._externalVideo)
 			{
+				logger.debug('enableWebcam(), _externalVideo:false');
 				await this._updateWebcams();
 				device = this._webcam.device;
 
+				logger.debug('enableWebcam(), _externalVideo:false, device:%o', device);
+				logger.debug('enableWebcam(), _externalVideo:false, _webcam:%o', this._webcam);
 				const { resolution } = this._webcam;
 
 				if (!device)
@@ -680,6 +710,8 @@ export default class RoomClient
 					});
 
 				track = stream.getVideoTracks()[0];
+
+				logger.debug('enableWebcam(), stream:%o, track:%o', stream, track);
 			}
 			else
 			{
@@ -688,10 +720,13 @@ export default class RoomClient
 				const stream = await this._getExternalVideoStream();
 
 				track = stream.getVideoTracks()[0].clone();
+
+				logger.debug('enableWebcam(), stream:%o, track:%o', stream, track);
 			}
 
 			if (this._useSimulcast)
 			{
+				logger.debug('enableWebcam(), _useSimulcast:true');
 				this._webcamProducer = await this._sendTransport.produce(
 					{
 						track,
@@ -707,6 +742,8 @@ export default class RoomClient
 				this._webcamProducer = await this._sendTransport.produce({ track });
 			}
 
+			logger.debug('enableWebcam(), _webcamProducer:%o', this._webcamProducer);
+
 			store.dispatch(stateActions.addProducer(
 				{
 					id            : this._webcamProducer.id,
@@ -720,11 +757,13 @@ export default class RoomClient
 
 			this._webcamProducer.on('transportclose', () =>
 			{
+				logger.debug('enableWebcam(), transportclose');
 				this._webcamProducer = null;
 			});
 
 			this._webcamProducer.on('trackended', () =>
 			{
+				logger.debug('enableWebcam(), trackended');
 				store.dispatch(requestActions.notify(
 					{
 						type : 'error',
@@ -765,8 +804,10 @@ export default class RoomClient
 		store.dispatch(
 			stateActions.removeProducer(this._webcamProducer.id));
 
+		logger.debug('disableWebcam(), _webcamProducer:%o', this._webcamProducer);
 		try
 		{
+			logger.debug('disableWebcam(), "request", "closeProducer"');
 			await this._protoo.request(
 				'closeProducer', { producerId: this._webcamProducer.id });
 		}
@@ -791,7 +832,9 @@ export default class RoomClient
 
 		try
 		{
+			logger.debug('changeWebcam(), old webcam:%o', this._webcam);
 			await this._updateWebcams();
+			logger.debug('changeWebcam(), new webcam:%o', this._webcam);
 
 			const array = Array.from(this._webcams.keys());
 			const len = array.length;
@@ -837,6 +880,8 @@ export default class RoomClient
 
 			store.dispatch(
 				stateActions.setProducerTrack(this._webcamProducer.id, track));
+
+			logger.debug('changeWebcam(), stream:%o, track:%o', stream, track);
 		}
 		catch (error)
 		{
@@ -855,7 +900,7 @@ export default class RoomClient
 
 	async changeWebcamResolution()
 	{
-		logger.debug('changeWebcamResolution()');
+		logger.debug('changeWebcamResolution(), this._webcam.resolution:%s', this._webcam.resolution);
 
 		store.dispatch(
 			stateActions.setWebcamInProgress(true));
@@ -892,6 +937,8 @@ export default class RoomClient
 
 			await this._webcamProducer.replaceTrack({ track });
 
+			logger.debug('changeWebcamResolution(), stream:%o, track:%o', stream, track);
+
 			store.dispatch(
 				stateActions.setProducerTrack(this._webcamProducer.id, track));
 		}
@@ -919,8 +966,12 @@ export default class RoomClient
 
 		this.disableWebcam();
 
+		let index = 0;
+
 		for (const consumer of this._consumers.values())
 		{
+			logger.debug('enableAudioOnly(), consumer[%d]:%o', index, consumer);
+			index += 1;
 			if (consumer.kind !== 'video')
 				continue;
 
@@ -950,8 +1001,11 @@ export default class RoomClient
 			this.enableWebcam();
 		}
 
+		let index = 0;
+		
 		for (const consumer of this._consumers.values())
 		{
+			logger.debug('disableAudioOnly(), consumer[%d]:%o', index++, consumer);
 			if (consumer.kind !== 'video')
 				continue;
 
@@ -992,19 +1046,23 @@ export default class RoomClient
 		{
 			if (this._sendTransport)
 			{
+				logger.debug('restartIce(), _sendTransport:%o', this._sendTransport);
 				const iceParameters = await this._protoo.request(
 					'restartIce',
 					{ transportId: this._sendTransport.id });
 
+				logger.debug('restartIce(), _sendTransport, iceParameters:%o', iceParameters);
 				await this._sendTransport.restartIce({ iceParameters });
 			}
 
 			if (this._recvTransport)
 			{
+				logger.debug('restartIce(), _recvTransport:%o', this._recvTransport);
 				const iceParameters = await this._protoo.request(
 					'restartIce',
 					{ transportId: this._recvTransport.id });
 
+				logger.debug('restartIce(), _recvTransport, iceParameters:%o', iceParameters);
 				await this._recvTransport.restartIce({ iceParameters });
 			}
 
@@ -1031,6 +1089,7 @@ export default class RoomClient
 	async setMaxSendingSpatialLayer(spatialLayer)
 	{
 		logger.debug('setMaxSendingSpatialLayer() [spatialLayer:%s]', spatialLayer);
+		logger.debug('setMaxSendingSpatialLayer() [_webcamProducer:%o]', this._webcamProducer);
 
 		try
 		{
@@ -1139,7 +1198,7 @@ export default class RoomClient
 
 	async getSendTransportRemoteStats()
 	{
-		logger.debug('getSendTransportRemoteStats()');
+		logger.debug('getSendTransportRemoteStats(), [this._sendTransport:%o]', this._sendTransport);
 
 		if (!this._sendTransport)
 			return;
@@ -1150,7 +1209,7 @@ export default class RoomClient
 
 	async getRecvTransportRemoteStats()
 	{
-		logger.debug('getRecvTransportRemoteStats()');
+		logger.debug('getRecvTransportRemoteStats(), [this._recvTransport:%o]', this._recvTransport);
 
 		if (!this._recvTransport)
 			return;
@@ -1161,7 +1220,7 @@ export default class RoomClient
 
 	async getMicRemoteStats()
 	{
-		logger.debug('getMicRemoteStats()');
+		logger.debug('getMicRemoteStats(), [this._micProducer:%o]', this._micProducer);
 
 		if (!this._micProducer)
 			return;
@@ -1172,7 +1231,7 @@ export default class RoomClient
 
 	async getWebcamRemoteStats()
 	{
-		logger.debug('getWebcamRemoteStats()');
+		logger.debug('getWebcamRemoteStats(), [this._webcamProducer:%o]', this._webcamProducer);
 
 		if (!this._webcamProducer)
 			return;
@@ -1183,10 +1242,11 @@ export default class RoomClient
 
 	async getConsumerRemoteStats(consumerId)
 	{
-		logger.debug('getConsumerRemoteStats()');
+		logger.debug('getConsumerRemoteStats(), [consumerId:%o]', consumerId);
 
 		const consumer = this._consumers.get(consumerId);
 
+		logger.debug('getConsumerRemoteStats(), [consumer:%o]', consumer);
 		if (!consumer)
 			return;
 
@@ -1195,7 +1255,7 @@ export default class RoomClient
 
 	async getSendTransportLocalStats()
 	{
-		logger.debug('getSendTransportLocalStats()');
+		logger.debug('getSendTransportLocalStats(), [this._sendTransport:%o]', this._sendTransport);
 
 		if (!this._sendTransport)
 			return;
@@ -1205,7 +1265,7 @@ export default class RoomClient
 
 	async getRecvTransportLocalStats()
 	{
-		logger.debug('getRecvTransportLocalStats()');
+		logger.debug('getRecvTransportLocalStats(), [this._recvTransport:%o]', this._recvTransport);
 
 		if (!this._recvTransport)
 			return;
@@ -1215,7 +1275,7 @@ export default class RoomClient
 
 	async getMicLocalStats()
 	{
-		logger.debug('getMicLocalStats()');
+		logger.debug('getMicLocalStats(), [this._micProducer:%o]', this._micProducer);
 
 		if (!this._micProducer)
 			return;
@@ -1225,7 +1285,7 @@ export default class RoomClient
 
 	async getWebcamLocalStats()
 	{
-		logger.debug('getWebcamLocalStats()');
+		logger.debug('getWebcamLocalStats(), [this._webcamProducer:%o]', this._webcamProducer);
 
 		if (!this._webcamProducer)
 			return;
@@ -1235,7 +1295,11 @@ export default class RoomClient
 
 	async getConsumerLocalStats(consumerId)
 	{
+		logger.debug('getConsumerLocalStats(), [consumerId:%o]', consumerId);
+
 		const consumer = this._consumers.get(consumerId);
+
+		logger.debug('getConsumerLocalStats(), [consumer:%o]', consumer);
 
 		if (!consumer)
 			return;
@@ -1269,7 +1333,7 @@ export default class RoomClient
 
 	async resetNetworkThrottle({ silent = false, secret })
 	{
-		logger.debug('resetNetworkThrottle()');
+		logger.debug('resetNetworkThrottle(), [silent:%o, secret:%o]', silent, secret);
 
 		try
 		{
@@ -1296,11 +1360,15 @@ export default class RoomClient
 
 		try
 		{
+			logger.debug('_joinRoom(), new mediasoupClient.Device');
 			this._mediasoupDevice = new mediasoupClient.Device();
+
+			logger.debug('_joinRoom(), [this._mediasoupDevice:%o]', this._mediasoupDevice);
 
 			const routerRtpCapabilities =
 				await this._protoo.request('getRouterRtpCapabilities');
 
+			logger.debug('_joinRoom(), [routerRtpCapabilities:%o]', routerRtpCapabilities);
 			await this._mediasoupDevice.load({ routerRtpCapabilities });
 
 			// NOTE: Stuff to play remote audios due to browsers' new autoplay policy.
@@ -1308,10 +1376,12 @@ export default class RoomClient
 			// Just get access to the mic and DO NOT close the mic track for a while.
 			// Super hack!
 			{
+				logger.debug('_joinRoom(), mediaDevices.getUserMedia');
 				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 				const audioTrack = stream.getAudioTracks()[0];
 
 				audioTrack.enabled = false;
+				logger.debug('_joinRoom(), [stream:%o, audioTrack:%o]', stream, audioTrack);
 
 				setTimeout(() => audioTrack.stop(), 120000);
 			}
@@ -1319,6 +1389,7 @@ export default class RoomClient
 			// Create mediasoup Transport for sending (unless we don't want to produce).
 			if (this._produce)
 			{
+				logger.debug('_joinRoom(), this._produce');
 				const transportInfo = await this._protoo.request(
 					'createWebRtcTransport',
 					{
@@ -1327,6 +1398,7 @@ export default class RoomClient
 						consuming : false
 					});
 
+				logger.debug('_joinRoom(), [transportInfo:%o]', transportInfo);
 				const {
 					id,
 					iceParameters,
@@ -1334,6 +1406,7 @@ export default class RoomClient
 					dtlsParameters
 				} = transportInfo;
 
+				logger.debug('_joinRoom(), _mediasoupDevice.createSendTransport');
 				this._sendTransport = this._mediasoupDevice.createSendTransport(
 					{
 						id,
@@ -1342,9 +1415,11 @@ export default class RoomClient
 						dtlsParameters
 					});
 
+				logger.debug('_joinRoom(), [this._sendTransport:%o]', this._sendTransport);
 				this._sendTransport.on(
 					'connect', ({ dtlsParameters }, callback, errback) => // eslint-disable-line no-shadow
 					{
+						logger.debug('_joinRoom(), this._sendTransport, connect [dtlsParameters:%o]', dtlsParameters);
 						this._protoo.request(
 							'connectWebRtcTransport',
 							{
@@ -1358,6 +1433,7 @@ export default class RoomClient
 				this._sendTransport.on(
 					'produce', async ({ kind, rtpParameters, appData }, callback, errback) =>
 					{
+						logger.debug('_joinRoom(), this._sendTransport, produce [kind:%o, rtpParameters:%o, appData:%o]', kind, rtpParameters, appData);
 						try
 						{
 							// eslint-disable-next-line no-shadow
@@ -1370,6 +1446,7 @@ export default class RoomClient
 									appData
 								});
 
+							logger.debug('_joinRoom(), this._sendTransport, produce [id:%o]', id);
 							callback({ id });
 						}
 						catch (error)
@@ -1382,6 +1459,7 @@ export default class RoomClient
 			// Create mediasoup Transport for sending (unless we don't want to consume).
 			if (this._consume)
 			{
+				logger.debug('_joinRoom(), this._consume');
 				const transportInfo = await this._protoo.request(
 					'createWebRtcTransport',
 					{
@@ -1390,6 +1468,7 @@ export default class RoomClient
 						consuming : true
 					});
 
+				logger.debug('_joinRoom(), [transportInfo:%o]', transportInfo);
 				const {
 					id,
 					iceParameters,
@@ -1397,6 +1476,7 @@ export default class RoomClient
 					dtlsParameters
 				} = transportInfo;
 
+				logger.debug('_joinRoom(), _mediasoupDevice.createRecvTransport');
 				this._recvTransport = this._mediasoupDevice.createRecvTransport(
 					{
 						id,
@@ -1405,9 +1485,11 @@ export default class RoomClient
 						dtlsParameters
 					});
 
+				logger.debug('_joinRoom(), [this._recvTransport:%o]', this._recvTransport);
 				this._recvTransport.on(
 					'connect', ({ dtlsParameters }, callback, errback) => // eslint-disable-line no-shadow
 					{
+						logger.debug('_joinRoom(), _recvTransport, connect, [dtlsParameters:%o]', dtlsParameters);
 						this._protoo.request(
 							'connectWebRtcTransport',
 							{
@@ -1419,6 +1501,7 @@ export default class RoomClient
 					});
 			}
 
+			logger.debug('_joinRoom(), join, [this._displayName:%o, this._device:%o, this._consume:%o, this._mediasoupDevice.rtpCapabilities:%o]', this._displayName, this._device, this._consume, this._mediasoupDevice.rtpCapabilities);
 			// Join now into the room.
 			// NOTE: Don't send our RTP capabilities if we don't want to consume.
 			const { peers } = await this._protoo.request(
@@ -1431,6 +1514,7 @@ export default class RoomClient
 						: undefined
 				});
 
+			logger.debug('_joinRoom(), [peers:%o]', peers);
 			store.dispatch(
 				stateActions.setRoomState('connected'));
 
@@ -1453,6 +1537,7 @@ export default class RoomClient
 			// Enable mic/webcam.
 			if (this._produce)
 			{
+				logger.debug('_joinRoom(), this._produce');
 				// Set our media capabilities.
 				store.dispatch(stateActions.setMediaCapabilities(
 					{
@@ -1492,6 +1577,8 @@ export default class RoomClient
 		logger.debug('_updateWebcams() | calling enumerateDevices()');
 
 		const devices = await navigator.mediaDevices.enumerateDevices();
+
+		logger.debug('_updateWebcams(), [devices:%o]', devices);
 
 		for (const device of devices)
 		{
@@ -1535,6 +1622,7 @@ export default class RoomClient
 
 	async _pauseConsumer(consumer)
 	{
+		logger.debug('_pauseConsumer(), [consumer:%o]', consumer);
 		if (consumer.paused)
 			return;
 
@@ -1561,6 +1649,7 @@ export default class RoomClient
 
 	async _resumeConsumer(consumer)
 	{
+		logger.debug('_resumeConsumer(), [consumer:%o]', consumer);
 		if (!consumer.paused)
 			return;
 
@@ -1587,9 +1676,11 @@ export default class RoomClient
 
 	async _getExternalVideoStream()
 	{
+		logger.debug('_getExternalVideoStream(), [this._externalVideoStream:%o]', this._externalVideoStream);
 		if (this._externalVideoStream)
 			return this._externalVideoStream;
 
+		logger.debug('_getExternalVideoStream(), [this._externalVideo:%o]', this._externalVideo);
 		if (this._externalVideo.readyState < 3)
 		{
 			await new Promise((resolve) => (
@@ -1598,12 +1689,20 @@ export default class RoomClient
 		}
 
 		if (this._externalVideo.captureStream)
+		{
+			logger.debug('_getExternalVideoStream(), captureStream');
 			this._externalVideoStream = this._externalVideo.captureStream();
+		}
 		else if (this._externalVideo.mozCaptureStream)
+		{
+			logger.debug('_getExternalVideoStream(), mozCaptureStream');
 			this._externalVideoStream = this._externalVideo.mozCaptureStream();
+		}
 		else
 			throw new Error('video.captureStream() not supported');
 
+		logger.debug('_getExternalVideoStream(), [this._externalVideoStream:%o]', this._externalVideoStream);
+		
 		return this._externalVideoStream;
 	}
 }

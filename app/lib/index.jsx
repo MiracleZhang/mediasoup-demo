@@ -22,7 +22,7 @@ import * as stateActions from './redux/stateActions';
 import reducers from './redux/reducers';
 import Room from './components/Room';
 
-const logger = new Logger();
+const logger = new Logger('LPZRoomClient Index.jsx');
 const reduxMiddlewares = [ thunk ];
 
 // if (process.env.NODE_ENV === 'development')
