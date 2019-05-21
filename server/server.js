@@ -25,7 +25,7 @@ const Room = require('./lib/Room');
 const interactiveServer = require('./lib/interactiveServer');
 const interactiveClient = require('./lib/interactiveClient');
 
-const logger = new Logger();
+const logger = new Logger('LPZ server');
 
 // Async queue to manage rooms.
 // @type {AwaitQueue}
@@ -59,9 +59,14 @@ run();
 
 async function run()
 {
+	logger.debug('run');
+
+	logger.debug('run, [config:%o]', config);
+
 	// Open the interactive server.
 	await interactiveServer();
 
+	logger.debug('run, [process.env.INTERACTIVE:%o]', process.env.INTERACTIVE);
 	// Open the interactive client.
 	if (process.env.INTERACTIVE === 'true' || process.env.INTERACTIVE === '1')
 		await interactiveClient();
@@ -93,6 +98,7 @@ async function run()
  */
 async function runMediasoupWorkers()
 {
+	logger.debug('runMediasoupWorkers');
 	const { numWorkers } = config.mediasoup;
 
 	logger.info('running %d mediasoup Workers...', numWorkers);
@@ -137,6 +143,7 @@ async function createExpressApp()
 	expressApp.param(
 		'roomId', (req, res, next, roomId) =>
 		{
+			logger.debug('createExpressApp, roomId, [roomId:%o, rooms:%o]', roomId, rooms);
 			// The room must exist for all API requests.
 			if (!rooms.has(roomId))
 			{
@@ -159,7 +166,7 @@ async function createExpressApp()
 		'/rooms/:roomId', (req, res) =>
 		{
 			const data = req.room.getRouterRtpCapabilities();
-
+			logger.debug('createExpressApp, /rooms/:roomId, [data:%o]', data);
 			res.status(200).json(data);
 		});
 
@@ -176,6 +183,7 @@ async function createExpressApp()
 				rtpCapabilities
 			} = req.body;
 
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters, [req.body:%o]', req.body);
 			try
 			{
 				const data = await req.room.createBroadcaster(
@@ -186,6 +194,7 @@ async function createExpressApp()
 						rtpCapabilities
 					});
 
+				logger.debug('createExpressApp, /rooms/:roomId/broadcasters, [data:%o]', data);
 				res.status(200).json(data);
 			}
 			catch (error)
@@ -201,6 +210,7 @@ async function createExpressApp()
 		'/rooms/:roomId/broadcasters/:broadcasterId', (req, res) =>
 		{
 			const { broadcasterId } = req.params;
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId, [broadcasterId:%o]', broadcasterId);
 
 			req.room.deleteBroadcaster({ broadcasterId });
 
@@ -220,6 +230,7 @@ async function createExpressApp()
 			const { broadcasterId } = req.params;
 			const { type, rtcpMux, comedia, multiSource } = req.body;
 
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports, [broadcasterId:%o, req.body:%o]', broadcasterId, req.body);
 			try
 			{
 				const data = await req.room.createBroadcasterTransport(
@@ -231,6 +242,7 @@ async function createExpressApp()
 						multiSource
 					});
 
+				logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports, [data:%o]', data);
 				res.status(200).json(data);
 			}
 			catch (error)
@@ -251,6 +263,7 @@ async function createExpressApp()
 			const { broadcasterId, transportId } = req.params;
 			const { dtlsParameters } = req.body;
 
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/connect, [broadcasterId:%o, transportId:%o, dtlsParameters:%o]', broadcasterId, transportId, dtlsParameters);
 			try
 			{
 				const data = await req.room.connectBroadcasterTransport(
@@ -260,6 +273,7 @@ async function createExpressApp()
 						dtlsParameters
 					});
 
+				logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/connect, [data:%o]', data);
 				res.status(200).json(data);
 			}
 			catch (error)
@@ -281,6 +295,7 @@ async function createExpressApp()
 			const { broadcasterId, transportId } = req.params;
 			const { kind, rtpParameters } = req.body;
 
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/producers, [broadcasterId:%o, transportId:%o, kind:%o, rtpParameters:%o]', broadcasterId, transportId, kind, rtpParameters);
 			try
 			{
 				const data = await req.room.createBroadcasterProducer(
@@ -291,6 +306,7 @@ async function createExpressApp()
 						rtpParameters
 					});
 
+				logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/producers, [data:%o]', data);
 				res.status(200).json(data);
 			}
 			catch (error)
@@ -312,6 +328,7 @@ async function createExpressApp()
 			const { broadcasterId, transportId } = req.params;
 			const { producerId } = req.query;
 
+			logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/consume, [broadcasterId:%o, transportId:%o, producerId:%o]', broadcasterId, transportId, producerId);
 			try
 			{
 				const data = await req.room.createBroadcasterConsumer(
@@ -321,6 +338,7 @@ async function createExpressApp()
 						producerId
 					});
 
+				logger.debug('createExpressApp, /rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/consume, [data:%o]', data);
 				res.status(200).json(data);
 			}
 			catch (error)
@@ -370,6 +388,7 @@ async function runHttpsServer()
 
 	await new Promise((resolve) =>
 	{
+		logger.info('running an HTTPS server, [ip:%o, port:%o]', config.https.listenIp, config.https.listenPort);
 		httpsServer.listen(config.https.listenPort, config.https.listenIp, resolve);
 	});
 }
@@ -407,8 +426,8 @@ async function runProtooWebSocketServer()
 		}
 
 		logger.info(
-			'protoo connection request [roomId:%s, peerId:%s, address:%s, origin:%s]',
-			roomId, peerId, info.socket.remoteAddress, info.origin);
+			'protoo connection request [roomId:%s, peerId:%s, address:%s, origin:%s, forceH264:%o]',
+			roomId, peerId, info.socket.remoteAddress, info.origin, forceH264);
 
 		// Serialize this code into the queue to avoid that two peers connecting at
 		// the same time with the same roomId create two separate rooms with same
@@ -416,6 +435,8 @@ async function runProtooWebSocketServer()
 		queue.push(async () =>
 		{
 			const room = await getOrCreateRoom({ roomId, forceH264 });
+
+			logger.debug('connectionrequest, [room:%o]', room);
 
 			// Accept the protoo WebSocket connection.
 			const protooWebSocketTransport = accept();
@@ -438,6 +459,7 @@ function getMediasoupWorker()
 {
 	const worker = mediasoupWorkers[nextMediasoupWorkerIdx];
 
+	logger.debug('getMediasoupWorker, [worker[%d]:%o]', nextMediasoupWorkerIdx, worker);
 	if (++nextMediasoupWorkerIdx === mediasoupWorkers.length)
 		nextMediasoupWorkerIdx = 0;
 

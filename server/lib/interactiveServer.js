@@ -6,6 +6,9 @@ const mediasoup = require('mediasoup');
 const colors = require('colors/safe');
 const pidusage = require('pidusage');
 
+const Logger = require('./Logger');
+const logger = new Logger('LPZ Interactive Server');
+
 // Maps to store all mediasoup objects.
 const workers = new Map();
 const routers = new Map();
@@ -20,7 +23,7 @@ class Interactive
 	constructor(socket)
 	{
 		this._socket = socket;
-
+		this.log('Interactive, constructor');
 		this._isTerminalOpen = false;
 	}
 
@@ -414,19 +417,22 @@ class Interactive
 
 	log(msg)
 	{
-		this._socket.write(`${colors.green(msg)}\n`);
+		this._socket.write(`${colors.green('LPZ Interactive Server: ' + msg)}\n`);
 	}
 
 	error(msg)
 	{
-		this._socket.write(`${colors.red.bold('ERROR: ')}${colors.red(msg)}\n`);
+		this._socket.write(`${colors.red.bold('ERROR: ')}${colors.red('LPZ Interactive Server: ' + msg)}\n`);
 	}
 }
 
 function runMediasoupObserver()
 {
+	logger.debug('runMediasoupObserver');
+
 	mediasoup.observer.on('newworker', (worker) =>
 	{
+		logger.debug('newworker, [worker:%o]', worker);
 		// Store the latest worker in a global variable.
 		global.worker = worker;
 
@@ -435,6 +441,7 @@ function runMediasoupObserver()
 
 		worker.observer.on('newrouter', (router) =>
 		{
+			logger.debug('newrouter, [router:%o]', router);
 			// Store the latest router in a global variable.
 			global.router = router;
 
@@ -443,6 +450,8 @@ function runMediasoupObserver()
 
 			router.observer.on('newtransport', (transport) =>
 			{
+				logger.debug('newtransport, [transport:%o]', transport);
+
 				// Store the latest transport in a global variable.
 				global.transport = transport;
 
@@ -451,6 +460,7 @@ function runMediasoupObserver()
 
 				transport.observer.on('newproducer', (producer) =>
 				{
+					logger.debug('newproducer, [producer:%o]', producer);
 					// Store the latest producer in a global variable.
 					global.producer = producer;
 
@@ -460,6 +470,7 @@ function runMediasoupObserver()
 
 				transport.observer.on('newconsumer', (consumer) =>
 				{
+					logger.debug('newconsumer, [consumer:%o]', consumer);
 					// Store the latest consumer in a global variable.
 					global.consumer = consumer;
 

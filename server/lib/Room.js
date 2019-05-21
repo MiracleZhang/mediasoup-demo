@@ -4,7 +4,7 @@ const throttle = require('@sitespeed.io/throttle');
 const Logger = require('./Logger');
 const config = require('../config');
 
-const logger = new Logger('Room');
+const logger = new Logger('LPZ demo-Room');
 
 /**
  * Room class.
@@ -28,13 +28,14 @@ class Room extends EventEmitter
 	 */
 	static async create({ mediasoupWorker, roomId, forceH264 = false })
 	{
-		logger.info('create() [roomId:%s, forceH264:%s]', roomId, forceH264);
+		logger.info('create() [mediasoupWorker:%o, roomId:%s, forceH264:%s]', mediasoupWorker, roomId, forceH264);
 
 		// Create a protoo Room instance.
 		const protooRoom = new protoo.Room();
 
 		// Router media codecs.
 		let mediaCodecs = config.mediasoup.router.mediaCodecs;
+		logger.debug('create() [mediaCodecs:%o, config:%o]', mediaCodecs, config);
 
 		// If forceH264 is given, remove all video codecs but H264.
 		if (forceH264)
@@ -44,10 +45,15 @@ class Room extends EventEmitter
 					codec.kind === 'audio' ||
 					codec.mimeType.toLowerCase() === 'video/h264'
 				));
+			logger.debug('create() [mediaCodecs:%o]', mediaCodecs);
 		}
+
+		logger.debug('create() createRouter enter, [mediaCodecs:%o]', mediaCodecs);
 
 		// Create a mediasoup Router.
 		const mediasoupRouter = await mediasoupWorker.createRouter({ mediaCodecs });
+
+		logger.debug('create() createRouter exit, [mediasoupRouter:%o]', mediasoupRouter);
 
 		// Create a mediasoup AudioLevelObserver.
 		const audioLevelObserver = await mediasoupRouter.createAudioLevelObserver(
@@ -57,6 +63,7 @@ class Room extends EventEmitter
 				interval   : 800
 			});
 
+		logger.debug('create() createAudioLevelObserver, [audioLevelObserver:%o]', audioLevelObserver);
 		return new Room({ roomId, protooRoom, mediasoupRouter, audioLevelObserver });
 	}
 
@@ -64,6 +71,8 @@ class Room extends EventEmitter
 	{
 		super();
 		this.setMaxListeners(Infinity);
+
+		logger.debug('constructor, [roomId:%o]', roomId);
 
 		// Room id.
 		// @type {String}
@@ -106,6 +115,8 @@ class Room extends EventEmitter
 		{
 			const { producer, volume } = volumes[0];
 
+			logger.debug('constructor, volumes, [producer:%o, volume:%o]', producer, volume);
+			
 			// logger.debug(
 			// 	'audioLevelObserver "volumes" event [producerId:%s, volume:%s]',
 			// 	producer.id, volume);
@@ -125,6 +136,7 @@ class Room extends EventEmitter
 
 		this._audioLevelObserver.on('silence', () =>
 		{
+			logger.debug('constructor, silence');
 			// logger.debug('audioLevelObserver "silence" event');
 
 			// Notify all Peers.
@@ -185,6 +197,7 @@ class Room extends EventEmitter
 	 */
 	handleProtooConnection({ peerId, consume, protooWebSocketTransport })
 	{
+		logger.debug('handleProtooConnection() | [peerId:%o, consume:%o]', peerId, consume);
 		const existingPeer = this._protooRoom.getPeer(peerId);
 
 		if (existingPeer)
@@ -300,6 +313,7 @@ class Room extends EventEmitter
 	 */
 	async createBroadcaster({ id, displayName, device = {}, rtpCapabilities })
 	{
+		logger.debug('createBroadcaster, [id:%o, displayName:%o, device:%o, rtpCapabilities:%o]', id, displayName, device, rtpCapabilities);
 		if (typeof id !== 'string' || !id)
 			throw new TypeError('missing body.id');
 		else if (typeof displayName !== 'string' || !displayName)
@@ -389,6 +403,7 @@ class Room extends EventEmitter
 			}
 		}
 
+		logger.debug('createBroadcaster, return [peerInfos:%o]', peerInfos);
 		return { peers: peerInfos };
 	}
 
@@ -400,6 +415,7 @@ class Room extends EventEmitter
 	deleteBroadcaster({ broadcasterId })
 	{
 		const broadcaster = this._broadcasters.get(broadcasterId);
+		logger.debug('deleteBroadcaster, [broadcasterId:%o, [broadcaster:%o]]', broadcasterId, broadcaster);
 
 		if (!broadcaster)
 			throw new Error(`broadcaster with id "${broadcasterId}" does not exist`);
@@ -442,7 +458,9 @@ class Room extends EventEmitter
 			multiSource = false
 		})
 	{
+		logger.debug('createBroadcasterTransport, [type:%o, rtcpMux:%o, comedia:%o, multiSource:%o]', type, rtcpMux, comedia, multiSource);
 		const broadcaster = this._broadcasters.get(broadcasterId);
+		logger.debug('createBroadcasterTransport, [broadcasterId:%o, [broadcaster:%o]]', broadcasterId, broadcaster);
 
 		if (!broadcaster)
 			throw new Error(`broadcaster with id "${broadcasterId}" does not exist`);
@@ -452,6 +470,7 @@ class Room extends EventEmitter
 			case 'webrtc':
 			{
 				const { initialAvailableOutgoingBitrate } = config.mediasoup.webRtcTransport;
+				logger.debug('createBroadcasterTransport, webrtc, [config:%o, initialAvailableOutgoingBitrate:%o]', config, initialAvailableOutgoingBitrate);
 
 				const transport = await this._mediasoupRouter.createWebRtcTransport(
 					{
@@ -461,6 +480,7 @@ class Room extends EventEmitter
 						initialAvailableOutgoingBitrate
 					});
 
+				logger.debug('createBroadcasterTransport, webrtc, [transport:%o]', transport);
 				// Store it.
 				broadcaster.data.transports.set(transport.id, transport);
 
@@ -482,6 +502,7 @@ class Room extends EventEmitter
 						multiSource : Boolean(multiSource)
 					});
 
+				logger.debug('createBroadcasterTransport, plain, [transport:%o]', transport);
 				// Store it.
 				broadcaster.data.transports.set(transport.id, transport);
 
@@ -517,7 +538,9 @@ class Room extends EventEmitter
 		}
 	)
 	{
+		logger.debug('connectBroadcasterTransport | [broadcasterId:%o, transportId:%o, dtlsParameters:%o]', broadcasterId, transportId, dtlsParameters);
 		const broadcaster = this._broadcasters.get(broadcasterId);
+		logger.debug('connectBroadcasterTransport | [broadcaster:%o]', broadcaster);
 
 		if (!broadcaster)
 			throw new Error(`broadcaster with id "${broadcasterId}" does not exist`);
@@ -555,7 +578,9 @@ class Room extends EventEmitter
 		}
 	)
 	{
+		logger.debug('createBroadcasterProducer | [broadcasterId:%o, transportId:%o, kind:%o, rtpParameters:%o]', broadcasterId, transportId, kind, rtpParameters);
 		const broadcaster = this._broadcasters.get(broadcasterId);
+		logger.debug('createBroadcasterProducer | [broadcaster:%o]', broadcaster);
 
 		if (!broadcaster)
 			throw new Error(`broadcaster with id "${broadcasterId}" does not exist`);
@@ -568,6 +593,7 @@ class Room extends EventEmitter
 		const producer =
 			await transport.produce({ kind, rtpParameters });
 
+		logger.debug('createBroadcasterProducer | [producer:%o]', producer);
 		// Store it.
 		broadcaster.data.producers.set(producer.id, producer);
 
@@ -604,6 +630,7 @@ class Room extends EventEmitter
 				.catch(() => {});
 		}
 
+		logger.debug('createBroadcasterProducer | return [id:%o]', producer.id);
 		return { id: producer.id };
 	}
 
@@ -624,7 +651,9 @@ class Room extends EventEmitter
 		}
 	)
 	{
+		logger.debug('createBroadcasterConsumer | [broadcasterId:%o, transportId:%o, producerId:%o]', broadcasterId, transportId, producerId);
 		const broadcaster = this._broadcasters.get(broadcasterId);
+		logger.debug('createBroadcasterConsumer | [broadcaster:%o]', broadcaster);
 
 		if (!broadcaster)
 			throw new Error(`broadcaster with id "${broadcasterId}" does not exist`);
@@ -633,6 +662,7 @@ class Room extends EventEmitter
 			throw new Error('broadcaster does not have rtpCapabilities');
 
 		const transport = broadcaster.data.transports.get(transportId);
+		logger.debug('createBroadcasterConsumer | [transport:%o]', transport);
 
 		if (!transport)
 			throw new Error(`transport with id "${transportId}" does not exist`);
@@ -642,6 +672,8 @@ class Room extends EventEmitter
 				producerId,
 				rtpCapabilities : broadcaster.data.rtpCapabilities
 			});
+
+		logger.debug('createBroadcasterConsumer | [consumer:%o]', consumer);
 
 		// Store it.
 		broadcaster.data.consumers.set(consumer.id, consumer);
@@ -679,6 +711,7 @@ class Room extends EventEmitter
 		{
 			case 'getRouterRtpCapabilities':
 			{
+				logger.debug('_handleProtooRequest | getRouterRtpCapabilities | [rtpCapabilities:%o]', this._mediasoupRouter.rtpCapabilities);
 				accept(this._mediasoupRouter.rtpCapabilities);
 
 				break;
@@ -686,6 +719,9 @@ class Room extends EventEmitter
 
 			case 'join':
 			{
+				logger.debug('_handleProtooRequest | join | [peer:%o]', peer);
+				logger.debug('_handleProtooRequest | join | [request.data:%o]', request.data);
+
 				// Ensure the Peer is not already joined.
 				if (peer.data.joined)
 					throw new Error('Peer already joined');
@@ -697,6 +733,7 @@ class Room extends EventEmitter
 				peer.data.device = device;
 				peer.data.rtpCapabilities = rtpCapabilities;
 
+				logger.debug('_handleProtooRequest | join | [peer.data:%o]', peer.data);
 				// Tell the new Peer about already joined Peers.
 				// And also create Consumers for existing Producers.
 
@@ -724,6 +761,7 @@ class Room extends EventEmitter
 					}
 				}
 
+				logger.debug('_handleProtooRequest | join | [peerInfos:%o]', peerInfos);
 				accept({ peers: peerInfos });
 
 				// Mark the new Peer as joined.
@@ -756,6 +794,9 @@ class Room extends EventEmitter
 					initialAvailableOutgoingBitrate
 				} = config.mediasoup.webRtcTransport;
 
+				logger.debug('_handleProtooRequest | createWebRtcTransport | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | createWebRtcTransport | [config.mediasoup.webRtcTransport:%o]', config.mediasoup.webRtcTransport);
+
 				const transport = await this._mediasoupRouter.createWebRtcTransport(
 					{
 						listenIps : config.mediasoup.webRtcTransport.listenIps,
@@ -766,6 +807,7 @@ class Room extends EventEmitter
 						appData   : { producing, consuming }
 					});
 
+				logger.debug('_handleProtooRequest | createWebRtcTransport | [transport:%o]', transport);
 				// Store the WebRtcTransport into the protoo Peer data Object.
 				peer.data.transports.set(transport.id, transport);
 
@@ -792,6 +834,9 @@ class Room extends EventEmitter
 				const { transportId, dtlsParameters } = request.data;
 				const transport = peer.data.transports.get(transportId);
 
+				logger.debug('_handleProtooRequest | connectWebRtcTransport | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | connectWebRtcTransport | [transport:%o]', transport);
+
 				if (!transport)
 					throw new Error(`transport with id "${transportId}" not found`);
 
@@ -807,10 +852,15 @@ class Room extends EventEmitter
 				const { transportId } = request.data;
 				const transport = peer.data.transports.get(transportId);
 
+				logger.debug('_handleProtooRequest | restartIce | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | restartIce | [transport:%o]', transport);
+
 				if (!transport)
 					throw new Error(`transport with id "${transportId}" not found`);
 
 				const iceParameters = await transport.restartIce();
+
+				logger.debug('_handleProtooRequest | restartIce | [iceParameters:%o]', iceParameters);
 
 				accept(iceParameters);
 
@@ -827,6 +877,10 @@ class Room extends EventEmitter
 				let { appData } = request.data;
 				const transport = peer.data.transports.get(transportId);
 
+				logger.debug('_handleProtooRequest | produce | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | produce | [transport:%o]', transport);
+				logger.debug('_handleProtooRequest | produce | [peerId:%o]', peer.id);
+
 				if (!transport)
 					throw new Error(`transport with id "${transportId}" not found`);
 
@@ -837,15 +891,17 @@ class Room extends EventEmitter
 				const producer =
 					await transport.produce({ kind, rtpParameters, appData });
 
+				logger.debug('_handleProtooRequest | produce | [producer:%o]', producer);
+
 				// Store the Producer into the protoo Peer data Object.
 				peer.data.producers.set(producer.id, producer);
 
 				// Set Producer events.
 				producer.on('score', (score) =>
 				{
-					// logger.debug(
-					// 	'producer "score" event [producerId:%s, score:%o]',
-					// 	producer.id, score);
+					logger.debug(
+					 	'producer "score" event [producerId:%s, score:%o]',
+					 	producer.id, score);
 
 					peer.notify('producerScore', { producerId: producer.id, score })
 						.catch(() => {});
@@ -890,6 +946,9 @@ class Room extends EventEmitter
 				const { producerId } = request.data;
 				const producer = peer.data.producers.get(producerId);
 
+				logger.debug('_handleProtooRequest | closeProducer | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | closeProducer | [producer:%o]', producer);
+
 				if (!producer)
 					throw new Error(`producer with id "${producerId}" not found`);
 
@@ -912,6 +971,9 @@ class Room extends EventEmitter
 				const { producerId } = request.data;
 				const producer = peer.data.producers.get(producerId);
 
+				logger.debug('_handleProtooRequest | pauseProducer | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | pauseProducer | [producer:%o]', producer);
+
 				if (!producer)
 					throw new Error(`producer with id "${producerId}" not found`);
 
@@ -930,6 +992,9 @@ class Room extends EventEmitter
 
 				const { producerId } = request.data;
 				const producer = peer.data.producers.get(producerId);
+
+				logger.debug('_handleProtooRequest | resumeProducer | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | resumeProducer | [producer:%o]', producer);
 
 				if (!producer)
 					throw new Error(`producer with id "${producerId}" not found`);
@@ -950,6 +1015,9 @@ class Room extends EventEmitter
 				const { consumerId } = request.data;
 				const consumer = peer.data.consumers.get(consumerId);
 
+				logger.debug('_handleProtooRequest | pauseConsumer | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | pauseConsumer | [consumer:%o]', consumer);
+
 				if (!consumer)
 					throw new Error(`consumer with id "${consumerId}" not found`);
 
@@ -968,6 +1036,9 @@ class Room extends EventEmitter
 
 				const { consumerId } = request.data;
 				const consumer = peer.data.consumers.get(consumerId);
+
+				logger.debug('_handleProtooRequest | resumeConsumer | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | resumeConsumer | [consumer:%o]', consumer);
 
 				if (!consumer)
 					throw new Error(`consumer with id "${consumerId}" not found`);
@@ -988,6 +1059,9 @@ class Room extends EventEmitter
 				const { consumerId, spatialLayer, temporalLayer } = request.data;
 				const consumer = peer.data.consumers.get(consumerId);
 
+				logger.debug('_handleProtooRequest | setConsumerPreferedLayers | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | setConsumerPreferedLayers | [consumer:%o]', consumer);
+				
 				if (!consumer)
 					throw new Error(`consumer with id "${consumerId}" not found`);
 
@@ -1007,6 +1081,9 @@ class Room extends EventEmitter
 				const { consumerId } = request.data;
 				const consumer = peer.data.consumers.get(consumerId);
 
+				logger.debug('_handleProtooRequest | requestConsumerKeyFrame | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | requestConsumerKeyFrame | [consumer:%o]', consumer);
+
 				if (!consumer)
 					throw new Error(`consumer with id "${consumerId}" not found`);
 
@@ -1025,6 +1102,8 @@ class Room extends EventEmitter
 
 				const { displayName } = request.data;
 				const oldDisplayName = peer.data.displayName;
+
+				logger.debug('_handleProtooRequest | changeDisplayName | [request.data:%o]', request.data);
 
 				// Store the display name into the custom data Object of the protoo
 				// Peer.
@@ -1053,10 +1132,15 @@ class Room extends EventEmitter
 				const { transportId } = request.data;
 				const transport = peer.data.transports.get(transportId);
 
+				logger.debug('_handleProtooRequest | getTransportStats | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | getTransportStats | [transport:%o]', transport);
+
 				if (!transport)
 					throw new Error(`transport with id "${transportId}" not found`);
 
 				const stats = await transport.getStats();
+
+				logger.debug('_handleProtooRequest | getTransportStats | [stats:%o]', stats);
 
 				accept(stats);
 
@@ -1068,10 +1152,15 @@ class Room extends EventEmitter
 				const { producerId } = request.data;
 				const producer = peer.data.producers.get(producerId);
 
+				logger.debug('_handleProtooRequest | getProducerStats | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | getProducerStats | [producer:%o]', producer);
+
 				if (!producer)
 					throw new Error(`producer with id "${producerId}" not found`);
 
 				const stats = await producer.getStats();
+
+				logger.debug('_handleProtooRequest | getProducerStats | [stats:%o]', stats);
 
 				accept(stats);
 
@@ -1083,10 +1172,15 @@ class Room extends EventEmitter
 				const { consumerId } = request.data;
 				const consumer = peer.data.consumers.get(consumerId);
 
+				logger.debug('_handleProtooRequest | getConsumerStats | [request.data:%o]', request.data);
+				logger.debug('_handleProtooRequest | getConsumerStats | [consumer:%o]', consumer);
+
 				if (!consumer)
 					throw new Error(`consumer with id "${consumerId}" not found`);
 
 				const stats = await consumer.getStats();
+
+				logger.debug('_handleProtooRequest | getConsumerStats | [stats:%o]', stats);
 
 				accept(stats);
 
@@ -1100,6 +1194,8 @@ class Room extends EventEmitter
 				const DefaultRtt = 0;
 
 				const { uplink, downlink, rtt, secret } = request.data;
+
+				logger.debug('_handleProtooRequest | applyNetworkThrottle | [request.data:%o]', request.data);
 
 				if (!secret || secret !== process.env.NETWORK_THROTTLE_SECRET)
 				{
@@ -1138,6 +1234,8 @@ class Room extends EventEmitter
 			case 'resetNetworkThrottle':
 			{
 				const { secret } = request.data;
+
+				logger.debug('_handleProtooRequest | resetNetworkThrottle | [request.data:%o]', request.data);
 
 				if (!secret || secret !== process.env.NETWORK_THROTTLE_SECRET)
 				{
@@ -1189,6 +1287,8 @@ class Room extends EventEmitter
 	 */
 	async _createConsumer({ consumerPeer, producerPeer, producer })
 	{
+		logger.debug('_createConsumer | [consumerPeer:%o, producerPeer:%o, producer:%o]', consumerPeer, producerPeer, producer);
+
 		// Optimization:
 		// - Create the server-side Consumer. If video, do it paused.
 		// - Tell its Peer about it and wait for its response.
@@ -1206,12 +1306,15 @@ class Room extends EventEmitter
 				})
 		)
 		{
+			logger.debug('_createConsumer | return 1');
 			return;
 		}
 
 		// Must take the Transport the remote Peer is using for consuming.
 		const transport = Array.from(consumerPeer.data.transports.values())
 			.find((t) => t.appData.consuming);
+
+		logger.debug('_createConsumer | [transport:%o]', transport);
 
 		// This should not happen.
 		if (!transport)
@@ -1232,6 +1335,7 @@ class Room extends EventEmitter
 					rtpCapabilities : consumerPeer.data.rtpCapabilities,
 					paused          : producer.kind === 'video'
 				});
+			logger.debug('_createConsumer | transport.consume, [consumer:%o]', consumer);
 		}
 		catch (error)
 		{
@@ -1246,12 +1350,14 @@ class Room extends EventEmitter
 		// Set Consumer events.
 		consumer.on('transportclose', () =>
 		{
+			logger.debug('_createConsumer | transportclose, [consumer.id:%o]', consumer.id);
 			// Remove from its map.
 			consumerPeer.data.consumers.delete(consumer.id);
 		});
 
 		consumer.on('producerclose', () =>
 		{
+			logger.debug('_createConsumer | producerclose, [consumer.id:%o]', consumer.id);
 			// Remove from its map.
 			consumerPeer.data.consumers.delete(consumer.id);
 
@@ -1261,12 +1367,14 @@ class Room extends EventEmitter
 
 		consumer.on('producerpause', () =>
 		{
+			logger.debug('_createConsumer | producerpause, [consumer.id:%o]', consumer.id);
 			consumerPeer.notify('consumerPaused', { consumerId: consumer.id })
 				.catch(() => {});
 		});
 
 		consumer.on('producerresume', () =>
 		{
+			logger.debug('_createConsumer | producerresume, [consumer.id:%o]', consumer.id);
 			consumerPeer.notify('consumerResumed', { consumerId: consumer.id })
 				.catch(() => {});
 		});
@@ -1277,12 +1385,14 @@ class Room extends EventEmitter
 			// 	'consumer "score" event [consumerId:%s, score:%o]',
 			// 	consumer.id, score);
 
+			logger.debug('_createConsumer | score, [consumer.id:%o, score:%o]', consumer.id, score);
 			consumerPeer.notify('consumerScore', { consumerId: consumer.id, score })
 				.catch(() => {});
 		});
 
 		consumer.on('layerschange', (layers) =>
 		{
+			logger.debug('_createConsumer | layerschange, [consumer.id:%o, layers:%o]', consumer.id, layers);
 			consumerPeer.notify(
 				'consumerLayersChanged',
 				{
@@ -1296,6 +1406,7 @@ class Room extends EventEmitter
 		// Send a protoo request to the remote Peer with Consumer parameters.
 		try
 		{
+			logger.debug('_createConsumer | consumerPeer.request, newConsumer, [producerPeer:%o, producer:%o, consumer:%o]', producerPeer, producer, consumer);
 			await consumerPeer.request(
 				'newConsumer',
 				{
